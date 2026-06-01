@@ -1,0 +1,884 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>소방시설 자체점검 적정 계약금액 산출기</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+KR:wght@300;400;500;700;900&display=swap');
+        body {
+            font-family: 'Noto Sans KR', 'Inter', sans-serif;
+            background-color: #f8fafc;
+        }
+
+        /* 프린트 스타일 최적화 (계약서 및 산출내역서 일괄 인쇄용) */
+        @media print {
+            body {
+                background-color: #ffffff;
+                color: #000000;
+            }
+            .no-print {
+                display: none !important;
+            }
+            #print_area {
+                display: block !important;
+                position: absolute;
+                left: 0;
+                top: 0;
+                width: 100%;
+                padding: 0 !important;
+                margin: 0 !important;
+                box-shadow: none !important;
+                border: none !important;
+            }
+            .print-page {
+                width: 100%;
+                min-height: 297mm; /* A4 세로 규격 확보 */
+                padding: 20mm 15mm !important;
+                box-sizing: border-box;
+                page-break-after: always;
+                break-after: page;
+                border: none !important;
+                box-shadow: none !important;
+                background: white !important;
+            }
+            .print-page:last-child {
+                page-break-after: avoid;
+                break-after: avoid;
+            }
+        }
+
+        /* 화면 뷰어 모드에서의 탭 제어용 스타일 */
+        #page_contract, #page_breakdown {
+            display: none;
+        }
+        .tab-active {
+            display: block !important;
+        }
+        @media print {
+            #page_contract, #page_breakdown {
+                display: block !important;
+            }
+        }
+    </style>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        fire: {
+                            50: '#fff1f2',
+                            100: '#ffe4e6',
+                            200: '#fecdd3',
+                            300: '#fda4af',
+                            400: '#fb7185',
+                            500: '#f43f5e',
+                            600: '#e11d48',
+                            700: '#be123c',
+                            800: '#9f1239',
+                            900: '#881337',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="text-slate-800 antialiased min-h-screen flex flex-col">
+
+    <!-- 상단 네비게이션 헤더 -->
+    <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm no-print">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16 items-center">
+                <div class="flex items-center space-x-3">
+                    <div class="bg-fire-600 text-white p-2.5 rounded-xl shadow-md flex items-center justify-center">
+                        <i class="fa-solid fa-fire-extinguisher text-xl"></i>
+                    </div>
+                    <div>
+                        <h1 class="font-bold text-lg text-slate-900 leading-tight">소방시설 자체점검 적정 대가 산출기</h1>
+                        <p class="text-xs text-slate-500 font-medium">2026년도 소방시설등 표준자체점검비 고시 완벽 반영 (실비정액가산방식)</p>
+                    </div>
+                </div>
+                <div class="flex items-center space-x-2">
+                    <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                        <span class="w-1.5 h-1.5 mr-1.5 bg-emerald-500 rounded-full animate-ping"></span>
+                        최신 소방 관계 법령 준수
+                    </span>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- 메인 대시보드 구조 -->
+    <main class="flex-grow max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8 no-print">
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+            
+            <!-- 좌측 사이드바: 입력 제어 및 설정 폼 (5열) -->
+            <section class="lg:col-span-5 space-y-6">
+                
+                <!-- 1단계: 점검 대상물 속성 정의 -->
+                <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-4">
+                    <div class="flex items-center space-x-2 border-b border-slate-100 pb-3">
+                        <span class="bg-fire-50 text-fire-600 w-7 h-7 rounded-lg flex items-center justify-center font-bold text-sm">1</span>
+                        <h3 class="font-bold text-slate-800">특정소방대상물 정보 입력</h3>
+                    </div>
+                    
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">소방대상물 명칭</label>
+                            <input type="text" id="bld_name" value="글로벌 센트럴 타워" oninput="calculateStandardPrice()" class="block w-full rounded-xl border-slate-200 px-4 py-3 focus:border-fire-500 focus:ring-fire-500 sm:text-sm border font-medium text-slate-950">
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">대상물 연면적 (㎡)</label>
+                            <div class="relative rounded-xl shadow-sm">
+                                <input type="number" id="area" value="12000" oninput="calculateStandardPrice()" class="block w-full rounded-xl border-slate-200 pl-4 pr-12 py-3 focus:border-fire-500 focus:ring-fire-500 sm:text-sm border transition-colors text-right font-semibold text-slate-900" placeholder="0">
+                                <div class="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none">
+                                    <span class="text-slate-400 text-sm">㎡</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">점검 구분</label>
+                                <select id="inspect_type" onchange="calculateStandardPrice()" class="block w-full rounded-xl border-slate-200 py-3 px-3 focus:border-fire-500 focus:ring-fire-500 sm:text-sm border bg-white font-medium">
+                                    <option value="종합" selected>종합점검</option>
+                                    <option value="작동">작동점검</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">대상 용도 구분</label>
+                                <select id="building_class" onchange="calculateStandardPrice()" class="block w-full rounded-xl border-slate-200 py-3 px-3 focus:border-fire-500 focus:ring-fire-500 sm:text-sm border bg-white font-medium">
+                                    <option value="1.2">1류 (지하상가, 터널, 복합 등)</option>
+                                    <option value="1.0" selected>2류 (기타 일반 소방대상물)</option>
+                                    <option value="0.8">3류 (국가유산, 동식물원 등)</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 2단계: 투입 점검 인력 구성 및 경력별 법정 가중치 -->
+                <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-4">
+                    <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                        <div class="flex items-center space-x-2">
+                            <span class="bg-fire-50 text-fire-600 w-7 h-7 rounded-lg flex items-center justify-center font-bold text-sm">2</span>
+                            <h3 class="font-bold text-slate-800">투입 점검인력 (2026년 고시 기준)</h3>
+                        </div>
+                        <span class="text-xs text-slate-400 font-medium">직접인건비 단가(원/일)</span>
+                    </div>
+
+                    <div class="space-y-3">
+                        <!-- 기술등급별 동적 입력란 -->
+                        <div class="flex items-center justify-between bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                            <div class="flex flex-col">
+                                <span class="text-sm font-semibold text-slate-800">특급점검자</span>
+                                <input type="number" id="wage_super" value="357676" oninput="calculateStandardPrice()" class="mt-1 w-24 rounded border-slate-200 text-right px-1 py-0.5 text-xs text-slate-500 bg-transparent border-b">
+                            </div>
+                            <div class="flex items-center space-x-2">
+                                <input type="number" id="tech_super" value="1" min="0" oninput="calculateStandardPrice()" class="w-16 rounded-lg border-slate-200 text-center py-1.5 border font-semibold text-slate-800">
+                                <span class="text-xs text-slate-400 font-medium">명</span>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center justify-between bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                            <div class="flex flex-col">
+                                <span class="text-sm font-semibold text-slate-800">고급점검자</span>
+                                <input type="number" id="wage_high" value="301863" oninput="calculateStandardPrice()" class="mt-1 w-24 rounded border-slate-200 text-right px-1 py-0.5 text-xs text-slate-500 bg-transparent border-b">
+                            </div>
+                            <div class="flex items-center space-x-2">
+                                <input type="number" id="tech_high" value="1" min="0" oninput="calculateStandardPrice()" class="w-16 rounded-lg border-slate-200 text-center py-1.5 border font-semibold text-slate-800">
+                                <span class="text-xs text-slate-400 font-medium">명</span>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center justify-between bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                            <div class="flex flex-col">
+                                <span class="text-sm font-semibold text-slate-800">중급점검자</span>
+                                <input type="number" id="wage_mid" value="261545" oninput="calculateStandardPrice()" class="mt-1 w-24 rounded border-slate-200 text-right px-1 py-0.5 text-xs text-slate-500 bg-transparent border-b">
+                            </div>
+                            <div class="flex items-center space-x-2">
+                                <input type="number" id="tech_mid" value="1" min="0" oninput="calculateStandardPrice()" class="w-16 rounded-lg border-slate-200 text-center py-1.5 border font-semibold text-slate-800">
+                                <span class="text-xs text-slate-400 font-medium">명</span>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center justify-between bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                            <div class="flex flex-col">
+                                <span class="text-sm font-semibold text-slate-800">초급점검자</span>
+                                <input type="number" id="wage_low" value="211881" oninput="calculateStandardPrice()" class="mt-1 w-24 rounded border-slate-200 text-right px-1 py-0.5 text-xs text-slate-500 bg-transparent border-b">
+                            </div>
+                            <div class="flex items-center space-x-2">
+                                <input type="number" id="tech_low" value="0" min="0" oninput="calculateStandardPrice()" class="w-16 rounded-lg border-slate-200 text-center py-1.5 border font-semibold text-slate-800">
+                                <span class="text-xs text-slate-400 font-medium">명</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 3단계: 기본 노무 및 경비 정의 -->
+                <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-4">
+                    <div class="flex items-center space-x-2 border-b border-slate-100 pb-3">
+                        <span class="bg-fire-50 text-fire-600 w-7 h-7 rounded-lg flex items-center justify-center font-bold text-sm">3</span>
+                        <h3 class="font-bold text-slate-800">산정 요율 및 할증 설정</h3>
+                    </div>
+
+                    <div class="space-y-4">
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">직접경비 비율 (기본 10%)</label>
+                                <div class="relative rounded-xl shadow-sm">
+                                    <input type="number" id="rate_direct_exp" value="10" oninput="calculateStandardPrice()" class="block w-full rounded-xl border-slate-200 pl-3 pr-8 py-2.5 focus:border-fire-500 focus:ring-fire-500 sm:text-sm border transition-colors text-right font-semibold text-slate-900">
+                                    <div class="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                                        <span class="text-slate-400 text-xs">%</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div>
+                                <label class="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">제경비 비율 (기본 115%)</label>
+                                <div class="relative rounded-xl shadow-sm">
+                                    <input type="number" id="rate_overhead" value="115" oninput="calculateStandardPrice()" class="block w-full rounded-xl border-slate-200 pl-3 pr-8 py-2.5 focus:border-fire-500 focus:ring-fire-500 sm:text-sm border transition-colors text-right font-semibold text-slate-900">
+                                    <div class="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                                        <span class="text-slate-400 text-xs">%</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">기술료 비율 (기본 30%)</label>
+                                <div class="relative rounded-xl shadow-sm">
+                                    <input type="number" id="rate_tech" value="30" oninput="calculateStandardPrice()" class="block w-full rounded-xl border-slate-200 pl-3 pr-8 py-2.5 focus:border-fire-500 focus:ring-fire-500 sm:text-sm border transition-colors text-right font-semibold text-slate-900">
+                                    <div class="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                                        <span class="text-slate-400 text-xs">%</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div>
+                                <label class="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">야간·휴일 할증</label>
+                                <select id="premium_rate" onchange="calculateStandardPrice()" class="block w-full rounded-xl border-slate-200 py-2.5 px-3 focus:border-fire-500 focus:ring-fire-500 sm:text-sm border bg-white font-medium">
+                                    <option value="1.0" selected>기본 (할증 없음)</option>
+                                    <option value="1.5">휴일 또는 야간 (50% 할증)</option>
+                                    <option value="2.25">휴일 야간 (추가 50% 가산)</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 4단계: 계약 기재 정보 입력 -->
+                <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-4">
+                    <div class="flex items-center space-x-2 border-b border-slate-100 pb-3">
+                        <span class="bg-fire-50 text-fire-600 w-7 h-7 rounded-lg flex items-center justify-center font-bold text-sm">4</span>
+                        <h3 class="font-bold text-slate-800">계약 당사자 세부 정보 입력</h3>
+                    </div>
+
+                    <div class="space-y-4">
+                        <div class="border-b border-slate-100 pb-3">
+                            <h4 class="text-xs font-bold text-slate-400 uppercase mb-2">발주자 (관계인)</h4>
+                            <div class="grid grid-cols-2 gap-2">
+                                <div>
+                                    <label class="block text-[10px] font-semibold text-slate-500 mb-0.5">상호 / 성명</label>
+                                    <input type="text" id="client_company" value="글로벌 센트럴 타워 입주대표회" oninput="calculateStandardPrice()" class="block w-full rounded-lg border-slate-200 px-2 py-1 text-xs border font-medium">
+                                </div>
+                                <div>
+                                    <label class="block text-[10px] font-semibold text-slate-500 mb-0.5">대표자명</label>
+                                    <input type="text" id="client_rep" value="김발주" oninput="calculateStandardPrice()" class="block w-full rounded-lg border-slate-200 px-2 py-1 text-xs border font-medium">
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-2 gap-2 mt-2">
+                                <div>
+                                    <label class="block text-[10px] font-semibold text-slate-500 mb-0.5">소재지(주소)</label>
+                                    <input type="text" id="client_address" value="서울특별시 중구 을지로 100" oninput="calculateStandardPrice()" class="block w-full rounded-lg border-slate-200 px-2 py-1 text-xs border font-medium">
+                                </div>
+                                <div>
+                                    <label class="block text-[10px] font-semibold text-slate-500 mb-0.5">연락처</label>
+                                    <input type="text" id="client_tel" value="02-1234-5678" oninput="calculateStandardPrice()" class="block w-full rounded-lg border-slate-200 px-2 py-1 text-xs border font-medium">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div>
+                            <h4 class="text-xs font-bold text-slate-400 uppercase mb-2">계약상대자 (소방업체)</h4>
+                            <div class="grid grid-cols-2 gap-2">
+                                <div>
+                                    <label class="block text-[10px] font-semibold text-slate-500 mb-0.5">관리업체명</label>
+                                    <input type="text" id="contractor_company" value="(주)대한소방이엔지" oninput="calculateStandardPrice()" class="block w-full rounded-lg border-slate-200 px-2 py-1 text-xs border font-medium">
+                                </div>
+                                <div>
+                                    <label class="block text-[10px] font-semibold text-slate-500 mb-0.5">대표자명</label>
+                                    <input type="text" id="contractor_rep" value="홍길동" oninput="calculateStandardPrice()" class="block w-full rounded-lg border-slate-200 px-2 py-1 text-xs border font-medium">
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-2 gap-2 mt-2">
+                                <div>
+                                    <label class="block text-[10px] font-semibold text-slate-500 mb-0.5">영업소 소재지</label>
+                                    <input type="text" id="contractor_address" value="서울특별시 송파구 가락로 200" oninput="calculateStandardPrice()" class="block w-full rounded-lg border-slate-200 px-2 py-1 text-xs border font-medium">
+                                </div>
+                                <div>
+                                    <label class="block text-[10px] font-semibold text-slate-500 mb-0.5">등록번호</label>
+                                    <input type="text" id="contractor_reg_no" value="서울 제 2026-0987 호" oninput="calculateStandardPrice()" class="block w-full rounded-lg border-slate-200 px-2 py-1 text-xs border font-medium">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </section>
+
+            <!-- 우측 대시보드: 계산 결과 분석 및 계약서 연계 (7열) -->
+            <section class="lg:col-span-7 space-y-6">
+                
+                <!-- 상단 카드: 종합 요약 지수 정보 -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between">
+                        <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">일일 직접인건비 합계</span>
+                        <div class="flex items-baseline space-x-1.5 mt-2">
+                            <span id="card_daily_wage" class="text-2xl font-extrabold text-slate-900">0</span>
+                            <span class="text-slate-400 text-sm font-semibold">원/일</span>
+                        </div>
+                    </div>
+                    <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between">
+                        <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">법정 일일점검한도</span>
+                        <div class="flex items-baseline space-x-1.5 mt-2">
+                            <span id="card_daily_limit" class="text-3xl font-extrabold text-slate-900">0</span>
+                            <span class="text-slate-400 text-sm font-semibold">㎡/일</span>
+                        </div>
+                    </div>
+                    <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between">
+                        <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">예상 점검 필요 일수</span>
+                        <div class="flex items-baseline space-x-1.5 mt-2">
+                            <span id="card_req_days" class="text-3xl font-extrabold text-fire-600">0.0</span>
+                            <span class="text-slate-400 text-sm font-semibold">일</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 상세 요금 산출 대시보드 -->
+                <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                    <div class="bg-slate-900 p-6 text-white flex justify-between items-center">
+                        <div>
+                            <h3 class="font-bold text-lg">적정 계약금액 산정표</h3>
+                            <p class="text-slate-400 text-xs mt-1">2026년 실비정액가산방식 실시간 산출</p>
+                        </div>
+                        <i class="fa-solid fa-receipt text-3xl text-slate-700"></i>
+                    </div>
+
+                    <div class="p-6 space-y-4">
+                        <!-- 항목별 대가 구조 -->
+                        <div class="space-y-3">
+                            <div class="flex justify-between items-center text-sm">
+                                <span class="text-slate-500 font-medium">① 직접인건비 <span class="text-xs text-slate-400">(단가합 × 점검일수 × 할증)</span></span>
+                                <span id="res_direct_labor" class="font-bold text-slate-800">0 원</span>
+                            </div>
+                            <div class="flex justify-between items-center text-sm">
+                                <span class="text-slate-500 font-medium">② 직접경비 <span class="text-xs text-slate-400">(직접인건비의 <span id="lbl_direct_exp_rate">10</span>%)</span></span>
+                                <span id="res_direct_expense" class="font-bold text-slate-800">0 원</span>
+                            </div>
+                            <div class="flex justify-between items-center text-sm">
+                                <span class="text-slate-500 font-medium">③ 제경비 <span class="text-xs text-slate-400">(직접인건비의 <span id="lbl_indirect_rate">115</span>%)</span></span>
+                                <span id="res_indirect_cost" class="font-bold text-slate-800">0 원</span>
+                            </div>
+                            <div class="flex justify-between items-center text-sm">
+                                <span class="text-slate-500 font-medium">④ 기술료 <span class="text-xs text-slate-400">((인건비+제경비)의 <span id="lbl_tech_rate">30</span>%)</span></span>
+                                <span id="res_tech_cost" class="font-bold text-slate-800">0 원</span>
+                            </div>
+                        </div>
+
+                        <hr class="border-slate-100">
+
+                        <div class="space-y-2 pt-2">
+                            <div class="flex justify-between items-center text-sm">
+                                <span class="text-slate-500 font-semibold">공급가액 합계</span>
+                                <span id="res_supply_price" class="text-lg font-bold text-slate-900">0 원</span>
+                            </div>
+                            <div class="flex justify-between items-center text-sm">
+                                <span class="text-slate-500 font-semibold">부가가치세 (10%)</span>
+                                <span id="res_vat" class="text-lg font-bold text-slate-900">0 원</span>
+                            </div>
+                        </div>
+
+                        <div class="bg-fire-50/50 border border-fire-100 rounded-2xl p-5 flex justify-between items-center mt-6">
+                            <div>
+                                <span class="text-xs font-bold text-fire-700 uppercase tracking-wider block">최종 적정 도급 총액</span>
+                                <span class="text-slate-400 text-[10px] font-medium">표준자체점검비 고시 기준 금액</span>
+                            </div>
+                            <div class="text-right">
+                                <span id="res_total_contract" class="text-3xl font-black text-fire-600 block">0 원</span>
+                                <span class="text-xs text-slate-400 font-medium">(부가세 포함 기준)</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 탭 제어판 -->
+                <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+                    <div class="flex bg-slate-100 p-1 rounded-xl w-full sm:w-auto">
+                        <button onclick="switchTab('contract')" id="btn_tab_contract" class="flex-1 sm:flex-initial text-xs font-bold px-4 py-2 rounded-lg transition-all bg-white text-slate-900 shadow-sm border border-slate-200">
+                            📄 1. 표준 계약서 미리보기
+                        </button>
+                        <button onclick="switchTab('breakdown')" id="btn_tab_breakdown" class="flex-1 sm:flex-initial text-xs font-bold px-4 py-2 rounded-lg transition-all text-slate-600 hover:text-slate-900">
+                            📊 2. 산출 내역서 미리보기
+                        </button>
+                    </div>
+                    <div class="flex space-x-2 w-full sm:w-auto justify-end">
+                        <button onclick="window.print()" class="bg-fire-600 hover:bg-fire-700 text-white font-bold px-5 py-2.5 rounded-xl text-sm transition-colors flex items-center space-x-1.5 shadow-lg shadow-fire-200">
+                            <i class="fa-solid fa-print"></i>
+                            <span>인쇄 및 PDF 저장</span>
+                        </button>
+                    </div>
+                </div>
+
+            </section>
+
+        </div>
+    </main>
+
+    <!-- 실시간 인쇄용/미리보기 통합 영역 -->
+    <section id="print_area" class="bg-slate-100 py-12 px-4 sm:px-8 border-t border-slate-200 shadow-inner">
+        <div class="max-w-4xl mx-auto space-y-8">
+            
+            <!-- PAGE 1: 표준 위탁 계약서 -->
+            <div id="page_contract" class="print-page bg-white p-8 sm:p-12 border border-slate-300 shadow-md rounded-lg space-y-6 tab-active">
+                <div class="text-center pb-4 border-b border-slate-200">
+                    <h2 class="text-2xl sm:text-3xl font-black tracking-tight text-slate-900 border-b-4 border-double border-slate-900 pb-2 inline-block">소방시설등 자체점검 위탁 계약서</h2>
+                    <p class="text-xs text-slate-500 mt-2">※ 「소방시설 설치 및 관리에 관한 법률 시행규칙」 제23조제2항 관련 공식 양식</p>
+                </div>
+
+                <!-- 계약 기본 안내 -->
+                <p class="text-xs sm:text-sm text-slate-700 leading-relaxed">
+                    특정소방대상물의 관계인(이하 <strong class="text-slate-950">"발주자"</strong>라 한다)과 소방시설관리업자(이하 <strong class="text-slate-950">"계약상대자"</strong>라 한다)는 소방시설등의 자체점검 위탁 업무에 관하여 신의성실의 원칙에 입각하여 다음과 같이 계약을 체결한다.
+                </p>
+
+                <!-- 표준 양식 테이블 -->
+                <table class="w-full text-xs border-collapse border border-slate-400">
+                    <tbody>
+                        <tr>
+                            <td class="border border-slate-400 bg-slate-50 p-3 font-bold w-1/4">소방대상물 명칭</td>
+                            <td class="border border-slate-400 p-3 font-semibold text-slate-800" colspan="3" id="lbl_print_bld_name">글로벌 빌딩</td>
+                        </tr>
+                        <tr>
+                            <td class="border border-slate-400 bg-slate-50 p-3 font-bold w-1/4">점검 대상 연면적</td>
+                            <td class="border border-slate-400 p-3 text-slate-800 font-semibold"><span class="lbl_print_area">0</span> ㎡</td>
+                            <td class="border border-slate-400 bg-slate-50 p-3 font-bold w-1/4">점검 종류 구분</td>
+                            <td class="border border-slate-400 p-3 text-slate-800 font-semibold"><span class="lbl_print_type">종합점검</span></td>
+                        </tr>
+                        <tr>
+                            <td class="border border-slate-400 bg-slate-50 p-3 font-bold">계약 연월일</td>
+                            <td class="border border-slate-400 p-3 text-slate-800 font-semibold" id="lbl_print_date">2026년 05월 00일</td>
+                            <td class="border border-slate-400 bg-slate-50 p-3 font-bold">점검 수행 예정 일수</td>
+                            <td class="border border-slate-400 p-3 text-slate-800 font-semibold"><span class="lbl_print_days">0.0</span> 일</td>
+                        </tr>
+                        <tr>
+                            <td class="border border-slate-400 bg-slate-100 p-3 font-bold text-slate-900">도급 총 계약금액</td>
+                            <td class="border border-slate-400 p-3 text-fire-700 font-bold text-sm sm:text-base" colspan="3">
+                                금 <span id="lbl_print_total_kor" class="underline">일억 이천삼백사십오만 육천칠백팔십</span> 원 정 (<span id="lbl_print_total_num" class="font-bold">0</span>원, 부가가치세 포함)
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <!-- 표준 계약 조건 명세 -->
+                <div class="space-y-4 text-[11px] sm:text-xs text-slate-600 leading-relaxed">
+                    <div>
+                        <p class="font-bold text-slate-800 text-sm">제 1 조 (목적)</p>
+                        <p>본 계약은 「소방시설 설치 및 관리에 관한 법률」 제22조에 따라 특정소방대상물에 설치된 소방시설등이 화재안전기준에 적합하게 설치·유지관리되고 있는지 여부를 자체점검하는 것을 목적으로 한다.</p>
+                    </div>
+
+                    <div>
+                        <p class="font-bold text-slate-800 text-sm">제 2 조 (배치기준 및 점검일수 준수)</p>
+                        <p>"계약상대자"는 동법 시행규칙 별표 4에 명시된 점검인력 배치기준을 엄격히 준수하여 점검을 수행하며, 본 계약서에 합의된 법정 점검 소요 예정 일수(<span class="lbl_print_days font-bold">0.0</span>일)를 충실히 확보하여 투명하고 철저한 자체점검을 완수한다.</p>
+                    </div>
+
+                    <div>
+                        <p class="font-bold text-slate-800 text-sm">제 3 조 (자재비 공제 및 정직성)</p>
+                        <p>"발주자"가 별도로 공급하거나 분담하는 직접 자재비가 있는 경우에는 이를 상호 계약 시 조정 공제할 수 있으며, 관련 점검 세금계산서 및 소방시설 자체점검 계약서 사본을 제출 서류로서 성실히 증빙하도록 한다.</p>
+                    </div>
+
+                    <div>
+                        <p class="font-bold text-slate-800 text-sm">제 4 조 (자체점검결과 보고서 및 계약서 제출)</p>
+                        <p>소방시설법 제23조에 의거하여 "발주자"는 소방본부장 또는 소방서장에게 점검 완료 결과 보고서를 제출할 때 본 계약서 사본을 필수 첨부 서류로서 관할 소방관서에 제출하여야 한다.</p>
+                    </div>
+                </div>
+
+                <!-- 계약 주체 서명 날인 -->
+                <div class="grid grid-cols-2 gap-8 pt-6 text-[11px] sm:text-xs border-t border-slate-200">
+                    <div class="space-y-3">
+                        <p class="font-bold text-slate-800 border-b border-slate-100 pb-1">"발주자" (관계인)</p>
+                        <div class="space-y-1 text-slate-700">
+                            <p>상 호 : <span id="lbl_print_client_company" class="font-semibold">글로벌 빌딩 관리회</span></p>
+                            <p>대 표 자 : <span id="lbl_print_client_rep" class="font-semibold">김발주</span> (인)</p>
+                            <p>소재지 : <span id="lbl_print_client_address" class="font-semibold">서울특별시 중구 을지로 100</span></p>
+                            <p>전화번호 : <span id="lbl_print_client_tel" class="font-semibold">02-1234-5678</span></p>
+                        </div>
+                    </div>
+                    <div class="space-y-3">
+                        <p class="font-bold text-slate-800 border-b border-slate-100 pb-1">"계약상대자" (소방시설관리업자)</p>
+                        <div class="space-y-1 text-slate-700">
+                            <p>상 호 : <span id="lbl_print_contractor_company" class="font-semibold">(주)대한소방이엔지</span></p>
+                            <p>대 표 자 : <span id="lbl_print_contractor_rep" class="font-semibold">홍길동</span> (인)</p>
+                            <p>소재지 : <span id="lbl_print_contractor_address" class="font-semibold">서울특별시 송파구 가락로 200</span></p>
+                            <p>등록번호 : <span id="lbl_print_contractor_reg_no" class="font-semibold">서울 제 2026-0987 호</span></p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- PAGE 2: 점검 대가 산출 내역서 -->
+            <div id="page_breakdown" class="print-page bg-white p-8 sm:p-12 border border-slate-300 shadow-md rounded-lg space-y-6">
+                <div class="text-center pb-4 border-b border-slate-200">
+                    <h2 class="text-2xl sm:text-3xl font-black tracking-tight text-slate-900 border-b-4 border-double border-slate-900 pb-2 inline-block">소방시설 자체점검 대가 산출내역서</h2>
+                    <p class="text-xs text-slate-500 mt-2">※ 2026년 소방시설등 표준자체점검비 산정기준 (실비정액가산방식)</p>
+                </div>
+
+                <!-- 기본 개요 현황 -->
+                <div class="grid grid-cols-2 gap-4 text-xs">
+                    <div class="space-y-1">
+                        <p><span class="font-bold text-slate-600">■ 대상물 명칭 :</span> <span class="lbl_print_bld_name font-semibold text-slate-900">글로벌 빌딩</span></p>
+                        <p><span class="font-bold text-slate-600">■ 점검 연면적 :</span> <span class="lbl_print_area font-semibold text-slate-900">0</span> ㎡</p>
+                        <p><span class="font-bold text-slate-600">■ 점검 종류 :</span> <span class="lbl_print_type font-semibold text-slate-900">종합점검</span></p>
+                    </div>
+                    <div class="space-y-1 text-right">
+                        <p><span class="font-bold text-slate-600">■ 일일 한도면적 :</span> <span id="lbl_print_daily_limit" class="font-semibold text-slate-900">0</span> ㎡/일</p>
+                        <p><span class="font-bold text-slate-600">■ 법정 점검일수 :</span> <span class="lbl_print_days font-bold text-fire-600">0.0</span> 일</p>
+                        <p><span class="font-bold text-slate-600">■ 야간/휴일 할증 :</span> <span id="lbl_print_premium" class="font-bold text-slate-900">기본 (1.0배)</span></p>
+                    </div>
+                </div>
+
+                <!-- 1. 투입 인력 배치 및 법정 가중치 산출 내역 -->
+                <div>
+                    <h4 class="text-xs font-bold text-slate-900 mb-2">1. 투입인력 및 직접인건비 산출 (1일 기준)</h4>
+                    <table class="w-full text-[11px] border-collapse border border-slate-300 text-center">
+                        <thead>
+                            <tr class="bg-slate-100 font-semibold text-slate-800">
+                                <th class="border border-slate-300 p-2">구분 (기술등급)</th>
+                                <th class="border border-slate-300 p-2">투입 인원</th>
+                                <th class="border border-slate-300 p-2">등급별 직접인건비(원/일)</th>
+                                <th class="border border-slate-300 p-2">일일 직접인건비 합계(원)</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbl_tech_body">
+                            <!-- JS를 통해 동적 생성됨 -->
+                        </tbody>
+                        <tfoot>
+                            <tr class="bg-slate-50 font-bold text-slate-900">
+                                <td class="border border-slate-300 p-2">합 계</td>
+                                <td class="border border-slate-300 p-2 text-center" id="lbl_print_total_workers">0 명</td>
+                                <td class="border border-slate-300 p-2 text-center text-slate-600">-</td>
+                                <td class="border border-slate-300 p-2 text-right pr-4 text-fire-600" id="lbl_print_daily_wage_total">0 원</td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+
+                <!-- 2. 대가 세부 산출 계산 상세 명세 -->
+                <div>
+                    <h4 class="text-xs font-bold text-slate-900 mb-2">2. 실비정액가산 대가 산정 명세</h4>
+                    <table class="w-full text-xs border-collapse border border-slate-300">
+                        <thead>
+                            <tr class="bg-slate-100 font-semibold text-slate-800 text-center">
+                                <th class="border border-slate-300 p-2.5 w-1/4">대가 항목</th>
+                                <th class="border border-slate-300 p-2.5">산출 기준 및 산식</th>
+                                <th class="border border-slate-300 p-2.5 w-1/4">금액 (원)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td class="border border-slate-300 p-2.5 font-semibold text-slate-800 bg-slate-50">① 직접인건비</td>
+                                <td class="border border-slate-300 p-2.5 text-slate-600">일일 합계액 × 점검일수 × 할증률</td>
+                                <td class="border border-slate-300 p-2.5 text-right font-semibold text-slate-900" id="p_direct_labor">0 원</td>
+                            </tr>
+                            <tr>
+                                <td class="border border-slate-300 p-2.5 font-semibold text-slate-800 bg-slate-50">② 직접경비</td>
+                                <td class="border border-slate-300 p-2.5 text-slate-600">① 직접인건비 × <span class="lbl_print_direct_exp_rate">10</span>%</td>
+                                <td class="border border-slate-300 p-2.5 text-right font-semibold text-slate-900" id="p_direct_expense">0 원</td>
+                            </tr>
+                            <tr>
+                                <td class="border border-slate-300 p-2.5 font-semibold text-slate-800 bg-slate-50">③ 제경비</td>
+                                <td class="border border-slate-300 p-2.5 text-slate-600">① 직접인건비 × <span class="lbl_print_indirect_rate">115</span>%</td>
+                                <td class="border border-slate-300 p-2.5 text-right font-semibold text-slate-900" id="p_indirect_cost">0 원</td>
+                            </tr>
+                            <tr>
+                                <td class="border border-slate-300 p-2.5 font-semibold text-slate-800 bg-slate-50">④ 기술료</td>
+                                <td class="border border-slate-300 p-2.5 text-slate-600">(① 직접인건비 + ③ 제경비) × <span class="lbl_print_tech_rate">30</span>%</td>
+                                <td class="border border-slate-300 p-2.5 text-right font-semibold text-slate-900" id="p_tech_cost">0 원</td>
+                            </tr>
+                            <tr class="bg-slate-50 font-bold">
+                                <td class="border border-slate-300 p-2.5 text-slate-900">공급가액 (소계)</td>
+                                <td class="border border-slate-300 p-2.5 text-slate-600">① + ② + ③ + ④</td>
+                                <td class="border border-slate-300 p-2.5 text-right text-slate-900" id="p_supply_price">0 원</td>
+                            </tr>
+                            <tr>
+                                <td class="border border-slate-300 p-2.5 font-semibold text-slate-800 bg-slate-50">⑤ 부가가치세</td>
+                                <td class="border border-slate-300 p-2.5 text-slate-600">공급가액 소계 × 10%</td>
+                                <td class="border border-slate-300 p-2.5 text-right font-semibold text-slate-900" id="p_vat">0 원</td>
+                            </tr>
+                            <tr class="bg-fire-50 font-extrabold text-fire-700 text-sm">
+                                <td class="border border-slate-300 p-3">합계 금액 (도급액)</td>
+                                <td class="border border-slate-300 p-3 text-slate-600">공급가액 + 부가가치세 (부가세 포함)</td>
+                                <td class="border border-slate-300 p-3 text-right" id="p_total_price">0 원</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="text-center pt-8 border-t border-slate-100">
+                    <p class="text-xs text-slate-500">본 대가산정 내역서는 2026년도 소방청 고시 표준자체점검비를 엄격히 준용하여 작성되었습니다.</p>
+                </div>
+            </div>
+
+        </div>
+    </section>
+
+    <!-- 하단 푸터 -->
+    <footer class="bg-slate-900 text-slate-400 py-6 text-center text-xs mt-auto no-print">
+        <p>© 2026 소방시설 자체점검 적정대가 계산 대시보드. All Rights Reserved.</p>
+    </footer>
+
+    <!-- 알림용 토스트 -->
+    <div id="toast" class="fixed bottom-5 right-5 bg-slate-900 text-white text-sm px-5 py-3 rounded-xl shadow-2xl opacity-0 translate-y-3 pointer-events-none transition-all duration-300 flex items-center space-x-2 z-50">
+        <i class="fa-solid fa-circle-info text-fire-500"></i>
+        <span id="toast_msg">알림 메시지</span>
+    </div>
+
+    <script>
+        // 커스텀 토스트 알림 함수
+        function showToast(msg) {
+            const toast = document.getElementById('toast');
+            document.getElementById('toast_msg').innerText = msg;
+            toast.classList.remove('opacity-0', 'translate-y-3', 'pointer-events-none');
+            toast.classList.add('opacity-100', 'translate-y-0');
+            setTimeout(() => {
+                toast.classList.remove('opacity-100', 'translate-y-0');
+                toast.classList.add('opacity-0', 'translate-y-3', 'pointer-events-none');
+            }, 3000);
+        }
+
+        // 오늘 날짜 및 인쇄 영역 날짜 갱신
+        window.onload = function() {
+            const today = new Date();
+            const year = today.getFullYear();
+            const month = String(today.getMonth() + 1).padStart(2, '0');
+            const date = String(today.getDate()).padStart(2, '0');
+            
+            document.getElementById('lbl_print_date').innerText = `${year}년 ${month}월 ${date}일`;
+            document.querySelectorAll('.lbl_today_date').forEach(el => el.innerText = `${year}-${month}-${date}`);
+            
+            // 최초 기동 시 데이터 자동 산출
+            calculateStandardPrice();
+            switchTab('contract');
+        }
+
+        // 화면 뷰 탭 전환 제어기
+        function switchTab(tabName) {
+            const pageContract = document.getElementById('page_contract');
+            const pageBreakdown = document.getElementById('page_breakdown');
+            const btnContract = document.getElementById('btn_tab_contract');
+            const btnBreakdown = document.getElementById('btn_tab_breakdown');
+
+            if (tabName === 'contract') {
+                pageContract.classList.add('tab-active');
+                pageBreakdown.classList.remove('tab-active');
+                btnContract.className = "flex-1 sm:flex-initial text-xs font-bold px-4 py-2 rounded-lg transition-all bg-white text-slate-900 shadow-sm border border-slate-200";
+                btnBreakdown.className = "flex-1 sm:flex-initial text-xs font-bold px-4 py-2 rounded-lg transition-all text-slate-600 hover:text-slate-900";
+            } else {
+                pageContract.classList.remove('tab-active');
+                pageBreakdown.classList.add('tab-active');
+                btnContract.className = "flex-1 sm:flex-initial text-xs font-bold px-4 py-2 rounded-lg transition-all text-slate-600 hover:text-slate-900";
+                btnBreakdown.className = "flex-1 sm:flex-initial text-xs font-bold px-4 py-2 rounded-lg transition-all bg-white text-slate-900 shadow-sm border border-slate-200";
+            }
+        }
+
+        // 한글 금액 변환 유틸리티
+        function numToKorean(num) {
+            const hanA = ["", "일", "이", "삼", "사", "오", "육", "칠", "팔", "구"];
+            const danA = ["", "십", "백", "천"];
+            const mDanA = ["", "만", "억", "조", "경"];
+            
+            let str = "";
+            let idx = 0;
+            
+            while(num > 0) {
+                let chunk = num % 10000;
+                num = Math.floor(num / 10000);
+                
+                let chunkStr = "";
+                for(let i = 0; i < 4; i++) {
+                    let d = chunk % 10;
+                    chunk = Math.floor(chunk / 10);
+                    if(d > 0) {
+                        chunkStr = hanA[d] + danA[i] + chunkStr;
+                    }
+                }
+                if(chunkStr !== "") {
+                    str = chunkStr + mDanA[idx] + str;
+                }
+                idx++;
+            }
+            return str;
+        }
+
+        // 핵심 대가 산정 연산 알고리즘 (2026년도 고시 실비정액가산방식)
+        function calculateStandardPrice() {
+            const area = parseFloat(document.getElementById('area').value) || 0;
+            const inspectType = document.getElementById('inspect_type').value;
+            const bldClassFactor = parseFloat(document.getElementById('building_class').value) || 1.0;
+            const bldName = document.getElementById('bld_name').value || "글로벌 센트럴 타워";
+
+            // 투입 인원 취득
+            const s = parseInt(document.getElementById('tech_super').value) || 0;
+            const h = parseInt(document.getElementById('tech_high').value) || 0;
+            const m = parseInt(document.getElementById('tech_mid').value) || 0;
+            const l = parseInt(document.getElementById('tech_low').value) || 0;
+
+            // 직접인건비 단가 취득 (기본값은 2026년 고시안)
+            const wageSuper = parseFloat(document.getElementById('wage_super').value) || 0;
+            const wageHigh = parseFloat(document.getElementById('wage_high').value) || 0;
+            const wageMid = parseFloat(document.getElementById('wage_mid').value) || 0;
+            const wageLow = parseFloat(document.getElementById('wage_low').value) || 0;
+
+            // 요율 취득
+            const rateDirectExp = parseFloat(document.getElementById('rate_direct_exp').value) || 10;
+            const rateOverhead = parseFloat(document.getElementById('rate_overhead').value) || 115;
+            const rateTech = parseFloat(document.getElementById('rate_tech').value) || 30;
+            const premium = parseFloat(document.getElementById('premium_rate').value) || 1.0;
+
+            // 계약 관계자 상호 입력 정보 취득
+            const clientCompany = document.getElementById('client_company').value;
+            const clientRep = document.getElementById('client_rep').value;
+            const clientAddress = document.getElementById('client_address').value;
+            const clientTel = document.getElementById('client_tel').value;
+
+            const contractorCompany = document.getElementById('contractor_company').value;
+            const contractorRep = document.getElementById('contractor_rep').value;
+            const contractorAddress = document.getElementById('contractor_address').value;
+            const contractorRegNo = document.getElementById('contractor_reg_no').value;
+
+            // 1. 일일 직접인건비 합산 및 인원수 계산
+            const dailyWageSum = (s * wageSuper) + (h * wageHigh) + (m * wageMid) + (l * wageLow);
+            const totalCount = s + h + m + l;
+
+            if (totalCount <= 0) {
+                showToast("투입 인력을 최소 1명 이상 입력해 주세요.");
+                return;
+            }
+
+            // 2. 법정한도 면적 계산
+            let baseDailyLimit = (inspectType === '종합') ? 10000 : 12000;
+            const dailyLimit = Math.round(baseDailyLimit / bldClassFactor);
+
+            // 3. 점검 소요 예정 일수 계산
+            let rawDays = area / dailyLimit;
+            if (rawDays < 0.5) rawDays = 0.5;
+            const reqDays = parseFloat(rawDays.toFixed(2));
+
+            // 4. 계약 세부 대가 산출 (실비정액가산)
+            const directLabor = Math.round(dailyWageSum * reqDays * premium);
+            const directExpense = Math.round(directLabor * (rateDirectExp / 100));
+            const indirectCost = Math.round(directLabor * (rateOverhead / 100));
+            const techCost = Math.round((directLabor + indirectCost) * (rateTech / 100));
+            
+            const supplyPrice = directLabor + directExpense + indirectCost + techCost;
+            const vat = Math.round(supplyPrice * 0.1);
+            const totalContractPrice = supplyPrice + vat;
+
+            // 5. 대시보드 화면 지표 업데이트
+            document.getElementById('card_daily_wage').innerText = dailyWageSum.toLocaleString();
+            document.getElementById('card_daily_limit').innerText = dailyLimit.toLocaleString();
+            
+            const daysEl = document.getElementById('card_req_days');
+            daysEl.innerText = reqDays.toFixed(2);
+            if (reqDays > 3) {
+                daysEl.className = "text-3xl font-extrabold text-amber-600";
+            } else {
+                daysEl.className = "text-3xl font-extrabold text-fire-600";
+            }
+
+            // 상세 표 요금 바인딩
+            document.getElementById('res_direct_labor').innerText = directLabor.toLocaleString() + " 원";
+            document.getElementById('lbl_direct_exp_rate').innerText = rateDirectExp;
+            document.getElementById('res_direct_expense').innerText = directExpense.toLocaleString() + " 원";
+            document.getElementById('lbl_indirect_rate').innerText = rateOverhead;
+            document.getElementById('res_indirect_cost').innerText = indirectCost.toLocaleString() + " 원";
+            document.getElementById('lbl_tech_rate').innerText = rateTech;
+            document.getElementById('res_tech_cost').innerText = techCost.toLocaleString() + " 원";
+            document.getElementById('res_supply_price').innerText = supplyPrice.toLocaleString() + " 원";
+            document.getElementById('res_vat').innerText = vat.toLocaleString() + " 원";
+            document.getElementById('res_total_contract').innerText = totalContractPrice.toLocaleString() + " 원";
+
+            // 6. [페이지 1: 표준 위탁 계약서] 내용 실시간 바인딩
+            document.querySelectorAll('.lbl_print_bld_name').forEach(el => el.innerText = bldName);
+            document.querySelectorAll('.lbl_print_area').forEach(el => el.innerText = area.toLocaleString());
+            document.querySelectorAll('.lbl_print_type').forEach(el => el.innerText = inspectType + " (" + (bldClassFactor === 1.2 ? '1류 대상' : bldClassFactor === 0.8 ? '3류 대상' : '2류 대상') + ")");
+            document.querySelectorAll('.lbl_print_days').forEach(el => el.innerText = reqDays.toFixed(2));
+            
+            document.getElementById('lbl_print_total_num').innerText = totalContractPrice.toLocaleString();
+            document.getElementById('lbl_print_total_kor').innerText = numToKorean(totalContractPrice);
+
+            // 발주자/관리업체 계약 정보 업데이트
+            document.getElementById('lbl_print_client_company').innerText = clientCompany || "_______________________________";
+            document.getElementById('lbl_print_client_rep').innerText = clientRep || "__________";
+            document.getElementById('lbl_print_client_address').innerText = clientAddress || "_______________________________";
+            document.getElementById('lbl_print_client_tel').innerText = clientTel || "_______________________________";
+
+            document.getElementById('lbl_print_contractor_company').innerText = contractorCompany || "_______________________________";
+            document.getElementById('lbl_print_contractor_rep').innerText = contractorRep || "__________";
+            document.getElementById('lbl_print_contractor_address').innerText = contractorAddress || "_______________________________";
+            document.getElementById('lbl_print_contractor_reg_no').innerText = contractorRegNo || "_______________________________";
+
+            // 7. [페이지 2: 대가 산출 내역서] 실시간 바인딩
+            document.getElementById('lbl_print_daily_limit').innerText = dailyLimit.toLocaleString();
+            const premiumTextElement = document.getElementById("premium_rate");
+            document.getElementById('lbl_print_premium').innerText = premiumTextElement.options[premiumTextElement.selectedIndex].text;
+
+            document.getElementById('p_direct_labor').innerText = directLabor.toLocaleString();
+            document.querySelectorAll('.lbl_print_direct_exp_rate').forEach(el => el.innerText = rateDirectExp);
+            document.getElementById('p_direct_expense').innerText = directExpense.toLocaleString();
+            document.querySelectorAll('.lbl_print_indirect_rate').forEach(el => el.innerText = rateOverhead);
+            document.getElementById('p_indirect_cost').innerText = indirectCost.toLocaleString();
+            document.querySelectorAll('.lbl_print_tech_rate').forEach(el => el.innerText = rateTech);
+            document.getElementById('p_tech_cost').innerText = techCost.toLocaleString();
+            document.getElementById('p_supply_price').innerText = supplyPrice.toLocaleString();
+            document.getElementById('p_vat').innerText = vat.toLocaleString();
+            document.getElementById('p_total_price').innerText = totalContractPrice.toLocaleString();
+
+            // 인력 명세 테이블 구성
+            const techBody = document.getElementById('tbl_tech_body');
+            let bodyHTML = '';
+
+            const personnelArr = [
+                { title: '특급점검자', wage: wageSuper, count: s },
+                { title: '고급점검자', wage: wageHigh, count: h },
+                { title: '중급점검자', wage: wageMid, count: m },
+                { title: '초급점검자', wage: wageLow, count: l }
+            ];
+
+            personnelArr.forEach(p => {
+                if (p.count > 0) {
+                    const rowWageSum = p.wage * p.count;
+                    bodyHTML += `
+                        <tr class="text-slate-700">
+                            <td class="border border-slate-300 p-2 text-left pl-4 font-medium">${p.title}</td>
+                            <td class="border border-slate-300 p-2 font-semibold">${p.count} 명</td>
+                            <td class="border border-slate-300 p-2 text-right pr-4">${p.wage.toLocaleString()} 원</td>
+                            <td class="border border-slate-300 p-2 font-semibold text-slate-900 text-right pr-4">${rowWageSum.toLocaleString()} 원</td>
+                        </tr>
+                    `;
+                }
+            });
+
+            if (bodyHTML === '') {
+                bodyHTML = `<tr><td colspan="4" class="border border-slate-300 p-4 text-slate-400 text-center">선택된 투입 점검인력이 없습니다.</td></tr>`;
+            }
+
+            techBody.innerHTML = bodyHTML;
+            document.getElementById('lbl_print_total_workers').innerText = totalCount + " 명";
+            document.getElementById('lbl_print_daily_wage_total').innerText = dailyWageSum.toLocaleString() + " 원";
+        }
+    </script>
+</body>
+</html>
