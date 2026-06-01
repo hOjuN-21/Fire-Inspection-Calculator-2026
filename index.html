@@ -1,6 +1,21 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
+    <script>
+    // 허용할 블로그 주소를 입력하세요 (http:// 나 https:// 는 빼고 도메인만 입력)
+    // 예시: "hojun.tistory.com" 또는 "my-wordpress-blog.com"
+    const allowedDomain = "https://hojun79.tistory.com/"; 
+    
+    // 방문자가 어디서 왔는지 확인 (Referrer 검사)
+    const referrer = document.referrer;
+
+    // 만약 이전 주소에 허용된 블로그 주소가 포함되어 있지 않다면?
+    if (!referrer.includes(allowedDomain)) {
+        alert("이 산출기는 공식 블로그를 통해서만 이용하실 수 있습니다. 블로그로 이동합니다.");
+        // 강제로 블로그 메인 화면으로 튕겨냅니다.
+        window.location.href = "https://" + allowedDomain; 
+    }
+</script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>소방시설 자체점검 적정 계약금액 산출기</title>
